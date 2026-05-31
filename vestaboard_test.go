@@ -293,3 +293,84 @@ func TestFormat_APIError(t *testing.T) {
 		t.Errorf("StatusCode = %d, want %d", apiErr.StatusCode, http.StatusBadRequest)
 	}
 }
+
+// --- APIError.Error() ---
+
+func TestAPIError_Error(t *testing.T) {
+	err := &APIError{StatusCode: 429, Status: "429 Too Many Requests"}
+	want := "vestaboard: API error 429 Too Many Requests"
+	if got := err.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+// --- WithHTTPClient ---
+
+func TestWithHTTPClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, Message{ID: "msg-custom-transport"})
+	}))
+	defer srv.Close()
+
+	custom := &http.Client{Timeout: srv.Client().Timeout}
+	c := NewClient(testToken, withCloudBaseURL(srv.URL), WithHTTPClient(custom))
+	if c.httpClient != custom {
+		t.Error("WithHTTPClient did not set the custom HTTP client")
+	}
+	got, err := c.Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if got.ID != "msg-custom-transport" {
+		t.Errorf("ID = %q, want %q", got.ID, "msg-custom-transport")
+	}
+}
+
+// --- Transport error paths ---
+// Closing the server before the call forces a connection-refused error,
+// exercising the httpClient.Do failure branch in each method.
+
+func TestRead_TransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	c := newTestClient(srv, nil)
+	srv.Close()
+	if _, err := c.Read(); err == nil {
+		t.Fatal("expected transport error, got nil")
+	}
+}
+
+func TestWriteMessage_TransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	c := newTestClient(srv, nil)
+	srv.Close()
+	if _, err := c.WriteText("hi"); err == nil {
+		t.Fatal("expected transport error, got nil")
+	}
+}
+
+func TestGetTransition_TransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	c := newTestClient(srv, nil)
+	srv.Close()
+	if _, err := c.GetTransition(); err == nil {
+		t.Fatal("expected transport error, got nil")
+	}
+}
+
+func TestSetTransition_TransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	c := newTestClient(srv, nil)
+	srv.Close()
+	if _, err := c.SetTransition(TransitionClassic, TransitionSpeedGentle); err == nil {
+		t.Fatal("expected transport error, got nil")
+	}
+}
+
+func TestFormat_TransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	c := newTestClient(nil, srv)
+	srv.Close()
+	if _, err := c.Format("hi"); err == nil {
+		t.Fatal("expected transport error, got nil")
+	}
+}
