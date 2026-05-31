@@ -37,7 +37,7 @@ type Characters [][]int
 
 // Message represents a board message response.
 type Message struct {
-	ID         string     `json:"_id"`
+	ID         string     `json:"id"`
 	Characters Characters `json:"characters"`
 	Created    int64      `json:"created"`
 }
